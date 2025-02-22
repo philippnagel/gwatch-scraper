@@ -1,5 +1,5 @@
 const cheerio = require("cheerio");
-const request = require("request");
+const axios = require("axios");
 const sqlite3 = require("sqlite3").verbose();
 
 // Initialize the database and create a table if it doesn't exist
@@ -39,24 +39,21 @@ function readRows(db) {
 }
 
 // Fetch a webpage and call the callback with the page body
-function fetchPage(url, callback) {
-    request(url, (error, response, body) => {
-        if (error) {
-            console.error("Error requesting page:", error);
-            return;
-        }
-        if (response.statusCode !== 200) {
-            console.error("Error: Received status code", response.statusCode);
-            return;
-        }
-        callback(body);
-    });
+async function fetchPage(url) {
+    try {
+        const response = await axios.get(url);
+        return response.data;
+    } catch (error) {
+        console.error("Error requesting page:", error.message);
+        throw error;
+    }
 }
 
 // Main function to run the scraper
-function run(db) {
+async function run(db) {
     const url = "https://www.bsi.bund.de/DE/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/Zertifizierung-und-Anerkennung/Zertifizierung-von-Managementsystemen/Zertifikatsnachweise-nach-Par-25-MsbG/zertifikatsnachweise-nach-par-25-msbg.html";
-    fetchPage(url, (body) => {
+    try {
+        const body = await fetchPage(url);
         const $ = cheerio.load(body);
 
         $("table tbody tr").each((index, element) => {
@@ -72,7 +69,9 @@ function run(db) {
 
         readRows(db);
         db.close();
-    });
+    } catch (error) {
+        console.error("Error running scraper:", error.message);
+    }
 }
 
 // Initialize the database and start the scraper
