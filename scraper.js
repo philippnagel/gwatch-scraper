@@ -1,59 +1,79 @@
-// This is a template for a Node.js scraper on morph.io (https://morph.io)
+const cheerio = require("cheerio");
+const request = require("request");
+const sqlite3 = require("sqlite3").verbose();
 
-var cheerio = require("cheerio");
-var request = require("request");
-var sqlite3 = require("sqlite3").verbose();
-
+// Initialize the database and create a table if it doesn't exist
 function initDatabase(callback) {
-	// Set up sqlite database.
-	var db = new sqlite3.Database("data.sqlite");
-	db.serialize(function() {
-		db.run("CREATE TABLE IF NOT EXISTS data (name TEXT)");
-		callback(db);
-	});
+    const db = new sqlite3.Database("data.sqlite");
+    db.serialize(() => {
+        db.run(`CREATE TABLE IF NOT EXISTS certificates (
+            company TEXT,
+            certificate_number TEXT,
+            valid_until TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`);
+        callback(db);
+    });
 }
 
-function updateRow(db, value) {
-	// Insert some data.
-	var statement = db.prepare("INSERT INTO data VALUES (?)");
-	statement.run(value);
-	statement.finalize();
+// Insert a row into the database
+function updateRow(db, company, certificateNumber, validUntil) {
+    const statement = db.prepare("INSERT INTO certificates (company, certificate_number, valid_until) VALUES (?, ?, ?)");
+    statement.run(company, certificateNumber, validUntil, (err) => {
+        if (err) {
+            console.error("Error inserting data:", err);
+        }
+        statement.finalize();
+    });
 }
 
+// Read and log all rows from the database
 function readRows(db) {
-	// Read some data.
-	db.each("SELECT rowid AS id, name FROM data", function(err, row) {
-		console.log(row.id + ": " + row.name);
-	});
+    db.each("SELECT rowid AS id, company, certificate_number, valid_until, timestamp FROM certificates ORDER BY timestamp DESC", (err, row) => {
+        if (err) {
+            console.error("Error reading data:", err);
+        } else {
+            console.log(`${row.id}: ${row.company}, ${row.certificate_number}, ${row.valid_until}, ${row.timestamp}`);
+        }
+    });
 }
 
+// Fetch a webpage and call the callback with the page body
 function fetchPage(url, callback) {
-	// Use request to read in pages.
-	request(url, function (error, response, body) {
-		if (error) {
-			console.log("Error requesting page: " + error);
-			return;
-		}
-
-		callback(body);
-	});
+    request(url, (error, response, body) => {
+        if (error) {
+            console.error("Error requesting page:", error);
+            return;
+        }
+        if (response.statusCode !== 200) {
+            console.error("Error: Received status code", response.statusCode);
+            return;
+        }
+        callback(body);
+    });
 }
 
+// Main function to run the scraper
 function run(db) {
-	// Use request to read in pages.
-	fetchPage("https://morph.io", function (body) {
-		// Use cheerio to find things in the page with css selectors.
-		var $ = cheerio.load(body);
+    const url = "https://www.bsi.bund.de/DE/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/Zertifizierung-und-Anerkennung/Zertifizierung-von-Managementsystemen/Zertifikatsnachweise-nach-Par-25-MsbG/zertifikatsnachweise-nach-par-25-msbg.html";
+    fetchPage(url, (body) => {
+        const $ = cheerio.load(body);
 
-		var elements = $("div.media-body span.p-name").each(function () {
-			var value = $(this).text().trim();
-			updateRow(db, value);
-		});
+        $("table tbody tr").each((index, element) => {
+            const columns = $(element).find("td");
+            const company = $(columns[0]).text().trim();
+            const certificateNumber = $(columns[1]).text().trim();
+            const validUntil = $(columns[2]).text().trim();
 
-		readRows(db);
+            if (company && certificateNumber && validUntil) {
+                updateRow(db, company, certificateNumber, validUntil);
+            }
+        });
 
-		db.close();
-	});
+        readRows(db);
+        db.close();
+    });
 }
 
+// Initialize the database and start the scraper
 initDatabase(run);
