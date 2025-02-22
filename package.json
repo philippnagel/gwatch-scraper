@@ -1,10 +1,18 @@
 {
+  "name": "gwatch-scraper",
   "version": "0.0.1",
+  "description": "gwatch-scraper",
   "main": "scraper.js",
+  "scripts": {
+    "start": "node scraper.js"
+  },
   "dependencies": {
-    "cheerio": "latest",
-    "request": "latest",
-    "sqlite3": "latest"
+    "axios": "^1.7.9",
+    "cheerio": "^1.0.0",
+    "sqlite3": "^5.1.7"
+  },
+  "engines": {
+    "node": "22.x"
   },
   "keywords": [
     "scraper",
